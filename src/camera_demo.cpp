@@ -1,18 +1,25 @@
 #include <algorithm>
+#include <cctype>
 #include <chrono>
+#include <filesystem>
 #include <opencv2/opencv.hpp>
 #include <string>
 
 #include "tasks/auto_aim/yolo.hpp"
 #include "tools/logger.hpp"
 
-// usage: camera_demo [config.yaml] [camera index or video file]
+// usage: camera_demo [config.yaml] [camera index or video file] [--headless]
 int main(int argc, char * argv[])
 {
+  std::filesystem::create_directories("logs");  // the logger writes here
+
   std::string config_path = argc > 1 ? argv[1] : "configs/default.yaml";
   std::string source = argc > 2 ? argv[2] : "0";
+  bool headless = argc > 3 && std::string(argv[3]) == "--headless";
 
-  bool is_index = std::all_of(source.begin(), source.end(), ::isdigit);
+  bool is_index = !source.empty() && std::all_of(source.begin(), source.end(), [](unsigned char c) {
+                    return std::isdigit(c);
+                  });
   cv::VideoCapture cap;
   if (is_index) cap.open(std::stoi(source));
   else cap.open(source);
@@ -22,7 +29,7 @@ int main(int argc, char * argv[])
     return 1;
   }
 
-  auto_aim::YOLO yolo(config_path, true);  // true shows the "detection" window
+  auto_aim::YOLO yolo(config_path, !headless);  // debug=true shows the "detection" window
 
   cv::Mat frame;
   int frame_count = 0;
@@ -39,7 +46,7 @@ int main(int argc, char * argv[])
     last = now;
     tools::logger()->info("{} armors, {:.1f} fps", armors.size(), 1.0 / dt);
 
-    if (cv::waitKey(1) == 'q') break;
+    if (!headless && cv::waitKey(1) == 'q') break;
   }
   return 0;
 }
