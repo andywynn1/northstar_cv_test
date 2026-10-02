@@ -2,9 +2,7 @@
 
 #include <yaml-cpp/yaml.h>
 
-#include "yolos/yolo11.hpp"
 #include "yolos/yolov5.hpp"
-#include "yolos/yolov8.hpp"
 
 namespace auto_aim
 {
@@ -13,19 +11,9 @@ YOLO::YOLO(const std::string & config_path, bool debug)
   auto yaml = YAML::LoadFile(config_path);
   auto yolo_name = yaml["yolo_name"].as<std::string>();
 
-  if (yolo_name == "yolov8") {
-    yolo_ = std::make_unique<YOLOV8>(config_path, debug);
-  }
-
-  else if (yolo_name == "yolo11") {
-    yolo_ = std::make_unique<YOLO11>(config_path, debug);
-  }
-
-  else if (yolo_name == "yolov5") {
+  if (yolo_name == "yolov5") {
     yolo_ = std::make_unique<YOLOV5>(config_path, debug);
-  }
-
-  else {
+  } else {
     throw std::runtime_error("Unknown yolo name: " + yolo_name + "!");
   }
 }
