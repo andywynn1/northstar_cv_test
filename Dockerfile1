@@ -1,0 +1,68 @@
+# Build environment for the smaller, OpenVINO-based YOLOv5 camera repo.
+# Build from the repository root: docker build -t auto-aim .
+# CPU inference only; CUDA, TensorRT and GPU driver setup are omitted.
+FROM ubuntu:22.04
+
+ARG OPENVINO_VERSION=2024.6.0
+ARG OPENVINO_SERIES=2024.6
+ARG OPENVINO_BUILD=17404.4c0f47d2335
+ARG DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        g++ \
+        cmake \
+        make \
+        wget \
+        ca-certificates \
+        pkg-config \
+        libopencv-dev \
+        libfmt-dev \
+        libyaml-cpp-dev \
+        libspdlog-dev \
+        libeigen3-dev \
+        libgl1 \
+        libgomp1 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Retain spdlog/Eigen from the original environment for logger/math utilities;
+# their source was not supplied, so their exact requirements are unverified.
+# OpenVINO 2024.6.0: retain the original pinned archives.
+# x86_64 uses the Ubuntu 22 archive; aarch64 uses the Ubuntu 20 archive.
+# Use device: CPU in configs/default.yaml.
+RUN set -eux; \
+    arch="$(uname -m)"; \
+    case "$arch" in \
+        aarch64) ov_arch=arm64; ov_os=ubuntu20 ;; \
+        x86_64)  ov_arch=x86_64; ov_os=ubuntu22 ;; \
+        *) echo "Unsupported architecture: $arch" >&2; exit 1 ;; \
+    esac; \
+    url="https://storage.openvinotoolkit.org/repositories/openvino/packages/${OPENVINO_SERIES}/linux/l_openvino_toolkit_${ov_os}_${OPENVINO_VERSION}.${OPENVINO_BUILD}_${ov_arch}.tgz"; \
+    wget -q "$url" -O /tmp/openvino.tgz; \
+    mkdir -p "/opt/intel/openvino_${OPENVINO_VERSION}"; \
+    tar -xf /tmp/openvino.tgz -C "/opt/intel/openvino_${OPENVINO_VERSION}" --strip-components=1; \
+    rm /tmp/openvino.tgz; \
+    ln -s "/opt/intel/openvino_${OPENVINO_VERSION}" /opt/intel/openvino; \
+    if [ -x "/opt/intel/openvino/install_dependencies/install_openvino_dependencies.sh" ]; then \
+        /opt/intel/openvino/install_dependencies/install_openvino_dependencies.sh -y; \
+    fi
+
+# Make OpenVINO discoverable by CMake and its runtime libraries by the loader.
+ENV OpenVINO_DIR=/opt/intel/openvino/runtime/cmake
+ENV CMAKE_PREFIX_PATH=/opt/intel/openvino/runtime/cmake
+RUN set -eux; \
+    find /opt/intel/openvino/runtime -type f -name '*.so*' -printf '%h\n' \
+        | sort -u > /etc/ld.so.conf.d/openvino.conf; \
+    ldconfig; \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app/auto_aim
+COPY . .
+
+# Add CMakeLists.txt and remove the unused YOLO11/YOLOv8/detector references
+# from the source before enabling this build step.
+# RUN cmake -S . -B build -DCMAKE_BUILD_TYPE=Release \
+#     && cmake --build build -j"$(nproc)"
+
+# Start a shell for development; build/run the camera test from the repo root.
+# Pass the host camera at runtime, e.g. --device=/dev/video0.
+CMD ["/bin/bash"]
