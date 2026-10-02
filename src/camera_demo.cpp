@@ -1,3 +1,5 @@
+#include <fmt/core.h>
+
 #include <algorithm>
 #include <cctype>
 #include <chrono>
@@ -6,12 +8,14 @@
 #include <string>
 
 #include "tasks/auto_aim/yolo.hpp"
+#include "tools/img_tools.hpp"
 #include "tools/logger.hpp"
 
-// usage: camera_demo [config.yaml] [camera index or video file] [--headless]
+// usage: camera_demo [config.yaml] [camera index, video file, or http URL] [--headless]
 int main(int argc, char * argv[])
 {
   std::filesystem::create_directories("logs");  // the logger writes here
+  std::filesystem::create_directories("out");   // headless snapshots go here
 
   std::string config_path = argc > 1 ? argv[1] : "configs/default.yaml";
   std::string source = argc > 2 ? argv[2] : "0";
@@ -46,7 +50,20 @@ int main(int argc, char * argv[])
     last = now;
     tools::logger()->info("{} armors, {:.1f} fps", armors.size(), 1.0 / dt);
 
-    if (!headless && cv::waitKey(1) == 'q') break;
+    if (headless) {
+      if (frame_count % 15 == 0) {
+        cv::Mat vis = frame.clone();
+        for (const auto & a : armors) {
+          tools::draw_points(vis, a.points, {0, 255, 0});
+          tools::draw_text(
+            vis, fmt::format("{} {:.2f}", auto_aim::ARMOR_NAMES[a.name], a.confidence), a.center,
+            {0, 255, 0});
+        }
+        cv::imwrite("out/latest.jpg", vis);
+      }
+    } else if (cv::waitKey(1) == 'q') {
+      break;
+    }
   }
   return 0;
 }
